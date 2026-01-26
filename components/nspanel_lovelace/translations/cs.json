@@ -24,6 +24,8 @@
   "fan_only": "Jen ventilátor",
   "on": "Zapnuto",
   "off": "Vypnuto",
+  "open": "Otevřeno",
+  "closed": "Zavřeno",
   "currently": "Aktuálně",
   "state": "Stav",
   "action": "Akce",

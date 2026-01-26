@@ -24,6 +24,8 @@
   "fan_only": "Tylko wentylator",
   "on": "Wł",
   "off": "Wył",
+  "open": "Otwarte",
+  "closed": "Zamknięte",
   "currently": "Aktualnie",
   "state": "Stan",
   "action": "Akcja",

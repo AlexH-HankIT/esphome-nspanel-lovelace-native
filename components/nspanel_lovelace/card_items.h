@@ -60,6 +60,8 @@ protected:
   static void state_sun_fn(StatefulPageItem *me);
   static void state_vacuum_fn(StatefulPageItem *me);
   static void state_translate_fn(StatefulPageItem *me);
+  static void state_alarm_translate_fn(StatefulPageItem *me);
+  static void state_binary_sensor_translate_fn(StatefulPageItem *me);
 
   void set_on_state_callback_(const char *type) override;
 

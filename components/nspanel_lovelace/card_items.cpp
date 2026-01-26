@@ -282,6 +282,26 @@ void EntitiesCardEntityItem::state_translate_fn(StatefulPageItem *me) {
   me_->value_ = ret;
 }
 
+void EntitiesCardEntityItem::state_alarm_translate_fn(StatefulPageItem *me) {
+  StatefulPageItem::state_alarm_fn(me);
+  EntitiesCardEntityItem::state_translate_fn(me);
+}
+
+void EntitiesCardEntityItem::state_binary_sensor_translate_fn(StatefulPageItem *me) {
+  StatefulPageItem::state_binary_sensor_fn(me);
+  auto me_ = static_cast<EntitiesCardEntityItem*>(me);
+  auto device_class = me_->get_attribute(ha_attr_type::device_class);
+  if (device_class == sensor_type::door ||
+      device_class == sensor_type::garage_door ||
+      device_class == sensor_type::window ||
+      device_class == sensor_type::opening) {
+    me_->value_ = get_translation(
+      me_->is_state(entity_state::on) ? entity_state::open : entity_state::closed);
+    return;
+  }
+  EntitiesCardEntityItem::state_translate_fn(me);
+}
+
 void EntitiesCardEntityItem::set_on_state_callback_(const char *type) {
   if (type == entity_type::light ||
       type == entity_type::switch_ ||
@@ -319,10 +339,12 @@ void EntitiesCardEntityItem::set_on_state_callback_(const char *type) {
   } else if (type == entity_type::vacuum) {
     this->on_state_callback_ = EntitiesCardEntityItem::state_vacuum_fn;
   } else if (
-      type == entity_type::person ||
-      type == entity_type::alarm_control_panel ||
-      type == entity_type::binary_sensor) {
+      type == entity_type::person) {
     this->on_state_callback_ = EntitiesCardEntityItem::state_translate_fn;
+  } else if (type == entity_type::alarm_control_panel) {
+    this->on_state_callback_ = EntitiesCardEntityItem::state_alarm_translate_fn;
+  } else if (type == entity_type::binary_sensor) {
+    this->on_state_callback_ = EntitiesCardEntityItem::state_binary_sensor_translate_fn;
   } else {
     this->on_state_callback_ = EntitiesCardEntityItem::state_generic_fn;
   }

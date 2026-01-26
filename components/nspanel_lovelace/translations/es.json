@@ -24,6 +24,8 @@
   "fan_only": "Solo ventilador",
   "on": "Encendido",
   "off": "Apagado",
+  "open": "Abierto",
+  "closed": "Cerrado",
   "currently": "Actualmente",
   "state": "Estado",
   "action": "Acción",

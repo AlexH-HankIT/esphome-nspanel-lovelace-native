@@ -24,6 +24,8 @@
   "fan_only": "Nur Ventilator",
   "on": "Auf",
   "off": "An",
+  "open": "Geöffnet",
+  "closed": "Geschlossen",
   "currently": "Aktuell",
   "state": "Zustand",
   "action": "Aktion",

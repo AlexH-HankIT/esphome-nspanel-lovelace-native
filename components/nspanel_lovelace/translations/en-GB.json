@@ -24,6 +24,8 @@
   "fan_only": "Fan only",
   "on": "On",
   "off": "Off",
+  "open": "Open",
+  "closed": "Closed",
   "currently": "Currently",
   "state": "State",
   "action": "Action",

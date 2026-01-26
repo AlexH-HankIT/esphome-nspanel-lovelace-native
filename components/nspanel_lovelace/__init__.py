@@ -132,6 +132,7 @@ CONF_MODEL = "model"
 CONF_SCREENSAVER_DATE_FORMAT = "date_format"
 CONF_SCREENSAVER_TIME_FORMAT = "time_format"
 CONF_SCREENSAVER_WEATHER = "weather"
+CONF_SCREENSAVER_ENTITIES = "entities"
 CONF_SCREENSAVER_STATUS_ICON_LEFT = "status_icon_left"
 CONF_SCREENSAVER_STATUS_ICON_RIGHT = "status_icon_right"
 CONF_SCREENSAVER_STATUS_ICON_ALT_FONT = "alt_font" # todo: to_code
@@ -332,6 +333,17 @@ SCHEMA_STATUS_ICON = cv.Schema({
     cv.Optional(CONF_SCREENSAVER_STATUS_ICON_ALT_FONT): cv.boolean,
 })
 
+SCHEMA_CARD_ENTITY = cv.Schema({
+    cv.Required(CONF_ENTITY_ID): valid_entity_id(),
+    cv.Optional(CONF_CARD_ENTITIES_NAME): cv.string,
+    cv.Optional(CONF_ICON): SCHEMA_ICON,
+})
+
+SCHEMA_SCREENSAVER_ENTITIES = cv.All(
+    cv.ensure_list(SCHEMA_CARD_ENTITY),
+    cv.Length(4, 4, "Screensaver entities must contain exactly 4 items"),
+)
+
 SCHEMA_SCREENSAVER = cv.Schema({
     cv.Optional(CONF_ID): valid_uuid,
     cv.Optional(CONF_TIME_ID): cv.use_id(time.RealTimeClock),
@@ -342,14 +354,9 @@ SCHEMA_SCREENSAVER = cv.Schema({
         cv.Required(CONF_ENTITY_ID): valid_entity_id(),
         cv.Optional(CONF_SCREENSAVER_FORECAST_METHOD, default="template_sensor"): cv.one_of("template_sensor", "service"),
     }),
+    cv.Optional(CONF_SCREENSAVER_ENTITIES): SCHEMA_SCREENSAVER_ENTITIES,
     cv.Optional(CONF_SCREENSAVER_STATUS_ICON_LEFT): SCHEMA_STATUS_ICON,
     cv.Optional(CONF_SCREENSAVER_STATUS_ICON_RIGHT): SCHEMA_STATUS_ICON,
-})
-
-SCHEMA_CARD_ENTITY = cv.Schema({
-    cv.Required(CONF_ENTITY_ID): valid_entity_id(),
-    cv.Optional(CONF_CARD_ENTITIES_NAME): cv.string,
-    cv.Optional(CONF_ICON): SCHEMA_ICON,
 })
 
 SCHEMA_CARD_BASE = cv.Schema({
@@ -442,6 +449,12 @@ def validate_config(config):
             add_entity_id(left.get(CONF_ENTITY_ID))
         if right and CONF_ENTITY_ID in right:
             add_entity_id(right.get(CONF_ENTITY_ID))
+        screensaver_entities = screensaver_config.get(CONF_SCREENSAVER_ENTITIES, [])
+        for entity_config in screensaver_entities:
+            entity_id = entity_config.get(CONF_ENTITY_ID)
+            if not entity_id or entity_id.startswith('delete'):
+                continue
+            add_entity_id(entity_id)
 
     return config
 
@@ -780,6 +793,10 @@ async def to_code(config):
                 cg.add(iconright_variable_class.set_alt_font(True))
             cg.add(screensaver_class.set_icon_right(iconright_variable_class))
 
+        screensaver_entities = screensaver_config.get(CONF_SCREENSAVER_ENTITIES, None)
+        if screensaver_entities is not None:
+            cg.add(nspanel.set_weather_forecast_enabled(False))
+
         if CONF_SCREENSAVER_WEATHER in screensaver_config:
             weather_config = screensaver_config[CONF_SCREENSAVER_WEATHER]
             if CONF_ENTITY_ID in weather_config:
@@ -794,10 +811,22 @@ async def to_code(config):
                         "Please use forecast_method 'service' instead (see the README for the required HA automation template)."
                     )
             screensaver_items = []
-            # 1 main weather item + 4 forecast items
-            for i in range(0,5):
+            if screensaver_entities is None:
+                # 1 main weather item + 4 forecast items (default behavior)
+                for i in range(0,5):
+                    screensaver_items.append(make_shared.template(screensaver_info[3]).__call__(get_new_uuid()))
+            else:
+                # 1 main weather item only (forecast slots are configurable)
                 screensaver_items.append(make_shared.template(screensaver_info[3]).__call__(get_new_uuid()))
-            cg.add(screensaver_class.add_item_range(screensaver_items))
+            if len(screensaver_items) > 0:
+                cg.add(screensaver_class.add_item_range(screensaver_items))
+
+        if screensaver_entities:
+            gen_card_entities(
+                screensaver_entities,
+                PageType.screensaver,
+                screensaver_class,
+                EntitiesCardEntityItem)
 
         cg.add(cg.RawStatement("}"))
 

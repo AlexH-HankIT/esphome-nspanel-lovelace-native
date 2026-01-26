@@ -122,12 +122,13 @@ void NSPanelLovelace::setup() {
     this->subscribe_homeassistant_state(
         &NSPanelLovelace::on_weather_temperature_unit_update_,
         this->weather_entity_id_, to_string(ha_attr_type::temperature_unit));
-
-    #ifndef USE_NSPANEL_WEATHER_SERVICE
-        this->subscribe_homeassistant_state(
-            &NSPanelLovelace::on_weather_forecast_update_,
-            this->weather_entity_id_, to_string(ha_attr_type::forecast));
-    #endif
+#ifndef USE_NSPANEL_WEATHER_SERVICE
+    if (this->weather_forecast_enabled_) {
+      this->subscribe_homeassistant_state(
+          &NSPanelLovelace::on_weather_forecast_update_, this->weather_entity_id_,
+          to_string(ha_attr_type::forecast));
+    }
+#endif
   }
 
   #ifdef USE_NSPANEL_WEATHER_SERVICE
@@ -2391,8 +2392,19 @@ void NSPanelLovelace::on_entity_attribute_update_(
 
     if (this->screensaver_ != nullptr && 
         page->is_type(page_type::screensaver)) {
-      force_current_page_update_ = 
-        this->screensaver_->should_render_status_update(entity_id);
+      if (this->screensaver_->should_render_status_update(entity_id)) {
+        force_current_page_update_ = true;
+        return;
+      }
+
+      for (auto &item : page->get_items()) {
+        auto stateful_item = page_item_cast<StatefulPageItem>(item.get());
+        if (stateful_item == nullptr) continue;
+        if (stateful_item->get_entity_id() == entity_id) {
+          force_current_page_update_ = true;
+          return;
+        }
+      }
       return;
     }
 
@@ -2505,6 +2517,7 @@ void NSPanelLovelace::on_weather_forecast_update_(
     std::string entity_id, std::string forecast_json
 #endif
 ) {
+  if (!this->weather_forecast_enabled_) return;
   ESP_LOGV(TAG, "Weather forecast update (%u): %zu %s",
     this->screensaver_ == nullptr, forecast_json.size(), forecast_json.c_str());
   if (this->screensaver_ == nullptr) return;
