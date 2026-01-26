@@ -111,6 +111,54 @@ inline bool iso8601_to_tm(const char* iso8601_string, tm &t) {
 	return true;
 }
 
+// Parse ISO8601 into epoch seconds (UTC). Timezone offsets are applied if present.
+// Supported examples: "2026-01-26T12:34:56Z", "2026-01-26T12:34:56+01:00"
+inline bool iso8601_to_epoch(const char* iso8601_string, int64_t &epoch_seconds) {
+  if (iso8601_string == nullptr) return false;
+
+  int year = 0, mon = 0, mday = 0, hour = 0, min = 0, sec = 0;
+  if (std::sscanf(iso8601_string, "%d-%d-%dT%d:%d:%d",
+      &year, &mon, &mday, &hour, &min, &sec) < 6) {
+    return false;
+  }
+
+  // Days since 1970-01-01 (UTC), Howard Hinnant's algorithm.
+  auto days_from_civil = [](int y, unsigned m, unsigned d) -> int64_t {
+    y -= m <= 2;
+    const int era = (y >= 0 ? y : y - 399) / 400;
+    const unsigned yoe = static_cast<unsigned>(y - era * 400);
+    const unsigned doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+    const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return static_cast<int64_t>(era) * 146097 + static_cast<int64_t>(doe) - 719468;
+  };
+
+  int64_t days = days_from_civil(year, static_cast<unsigned>(mon), static_cast<unsigned>(mday));
+  epoch_seconds = days * 86400LL + hour * 3600LL + min * 60LL + sec;
+
+  // Parse timezone offset if present.
+  int tz_sign = 0;
+  int tz_hour = 0;
+  int tz_min = 0;
+  const char *tz_ptr = nullptr;
+  if (std::strlen(iso8601_string) >= 20) {
+    tz_ptr = std::strpbrk(iso8601_string + 19, "Z+-");
+  }
+  if (tz_ptr != nullptr) {
+    if (*tz_ptr == 'Z') {
+      tz_sign = 0;
+    } else if (*tz_ptr == '+' || *tz_ptr == '-') {
+      tz_sign = (*tz_ptr == '+') ? 1 : -1;
+      std::sscanf(tz_ptr + 1, "%d:%d", &tz_hour, &tz_min);
+    }
+  }
+
+  int64_t tz_offset = static_cast<int64_t>(tz_sign) *
+      (static_cast<int64_t>(tz_hour) * 3600LL + static_cast<int64_t>(tz_min) * 60LL);
+  epoch_seconds -= tz_offset;
+
+  return true;
+}
+
 inline uint16_t rgb_dec565(uint8_t red, uint8_t green, uint8_t blue) {
   // if type(rgb_color) is str:
   //     rgb_color = apis.ha_api.render_template(rgb_color)

@@ -1068,6 +1068,15 @@ void NSPanelLovelace::render_timer_detail_update_(StatefulPageItem *item) {
   bool render = false;
   uint16_t min_remaining = 0, sec_remaining = 0;
   bool idle = state == entity_state::paused || state == entity_state::idle;
+  auto parse_hms = [&](const std::string &time_str) -> bool {
+    if (time_str.empty()) return false;
+    std::vector<std::string> time_parts;
+    split_str(':', time_str, time_parts);
+    if (time_parts.size() != 3) return false;
+    min_remaining = (stoi(time_parts[0]) * 60) + stoi(time_parts[1]);
+    sec_remaining = stoi(time_parts[2]);
+    return true;
+  };
 
   if (idle) {
     this->cancel_interval(entity_type::timer);
@@ -1077,25 +1086,17 @@ void NSPanelLovelace::render_timer_detail_update_(StatefulPageItem *item) {
     } else {
       time_remaining_str = item->get_attribute(ha_attr_type::duration);
     }
-    if (!time_remaining_str.empty()) {
-      std::vector<std::string> time_parts;
-      split_str(':', time_remaining_str, time_parts);
-      if (time_parts.size() == 3) {
-        min_remaining = (stoi(time_parts[0]) * 60) + stoi(time_parts[1]);
-        sec_remaining = stoi(time_parts[2]);
-        render = true;
-      }
-    }
+    render = parse_hms(time_remaining_str);
   }
   // active
   else {
     auto &finishes_at = item->get_attribute(ha_attr_type::finishes_at);
-    if (!finishes_at.empty()) {
-      tm t{};
-      if (iso8601_to_tm(finishes_at.c_str(), t)) {
+    if (!finishes_at.empty() && this->time_id_.has_value()) {
+      int64_t finish_epoch = 0;
+      if (iso8601_to_epoch(finishes_at.c_str(), finish_epoch)) {
         ESPTime now = this->time_id_.value()->now();
         if (now.is_valid()) {
-          double seconds = difftime(mktime(&t), now.timestamp);
+          int64_t seconds = finish_epoch - static_cast<int64_t>(now.timestamp);
           if (seconds >= UINT16_MAX) seconds = UINT16_MAX;
           if (seconds < 0) seconds = 0;
           min_remaining = static_cast<uint16_t>(seconds) / 60;
@@ -1106,6 +1107,9 @@ void NSPanelLovelace::render_timer_detail_update_(StatefulPageItem *item) {
           }
         }
       }
+    }
+    if (!render) {
+      render = parse_hms(item->get_attribute(ha_attr_type::remaining));
     }
   }
 
