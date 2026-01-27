@@ -70,5 +70,22 @@ protected:
   uint16_t get_render_buffer_reserve_() const override;
 };
 
+/*
+ * =============== ScreensaverEntityItem ===============
+ */
+
+class ScreensaverEntityItem : public EntitiesCardEntityItem {
+public:
+  ScreensaverEntityItem(const std::string &uuid, std::shared_ptr<Entity> entity);
+  ScreensaverEntityItem(
+      const std::string &uuid, std::shared_ptr<Entity> entity,
+      const std::string &display_name);
+  // virtual ~ScreensaverEntityItem() {}
+
+protected:
+  static void state_on_off_fn(StatefulPageItem *me);
+  void set_on_state_callback_(const char *type) override;
+};
+
 } // namespace nspanel_lovelace
 } // namespace esphome

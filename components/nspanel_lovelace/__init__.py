@@ -534,6 +534,7 @@ NavigationItem = nspanel_lovelace_ns.class_("NavigationItem")
 StatusIconItem = nspanel_lovelace_ns.class_("StatusIconItem")
 WeatherItem = nspanel_lovelace_ns.class_("WeatherItem")
 EntitiesCardEntityItem = nspanel_lovelace_ns.class_("EntitiesCardEntityItem")
+ScreensaverEntityItem = nspanel_lovelace_ns.class_("ScreensaverEntityItem")
 GridCardEntityItem = nspanel_lovelace_ns.class_("GridCardEntityItem")
 AlarmButtonItem = nspanel_lovelace_ns.class_("AlarmButtonItem")
 
@@ -826,7 +827,7 @@ async def to_code(config):
                 screensaver_entities,
                 PageType.screensaver,
                 screensaver_class,
-                EntitiesCardEntityItem)
+                ScreensaverEntityItem)
 
         cg.add(cg.RawStatement("}"))
 

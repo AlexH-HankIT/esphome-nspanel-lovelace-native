@@ -361,5 +361,50 @@ uint16_t EntitiesCardEntityItem::get_render_buffer_reserve_() const {
          this->value_.length() + this->value_postfix_.length() + 2;
 }
 
+/*
+ * =============== ScreensaverEntityItem ===============
+ */
+
+ScreensaverEntityItem::ScreensaverEntityItem(
+    const std::string &uuid, std::shared_ptr<Entity> entity) :
+    EntitiesCardEntityItem(uuid, std::move(entity)) {
+  // ensure the overridden set_on_state_callback_ is used
+  this->on_entity_type_change(this->get_type());
+  this->render_buffer_.reserve(this->get_render_buffer_reserve_());
+}
+
+ScreensaverEntityItem::ScreensaverEntityItem(
+    const std::string &uuid, std::shared_ptr<Entity> entity,
+    const std::string &display_name) :
+    EntitiesCardEntityItem(uuid, std::move(entity), display_name) {
+  // ensure the overridden set_on_state_callback_ is used
+  this->on_entity_type_change(this->get_type());
+  this->render_buffer_.reserve(this->get_render_buffer_reserve_());
+}
+
+void ScreensaverEntityItem::state_on_off_fn(StatefulPageItem *me) {
+  auto me_ = static_cast<ScreensaverEntityItem*>(me);
+  if (me_->is_state(entity_state::on)) {
+    me_->value_ = get_translation(translation_item::on);
+  } else if (me_->is_state(entity_state::off)) {
+    me_->value_ = get_translation(translation_item::off);
+  } else {
+    me_->value_ = get_translation(me_->get_state());
+  }
+  StatefulPageItem::state_on_off_fn(me);
+}
+
+void ScreensaverEntityItem::set_on_state_callback_(const char *type) {
+  if (type == entity_type::light ||
+      type == entity_type::switch_ ||
+      type == entity_type::input_boolean ||
+      type == entity_type::automation ||
+      type == entity_type::fan) {
+    this->on_state_callback_ = ScreensaverEntityItem::state_on_off_fn;
+  } else {
+    EntitiesCardEntityItem::set_on_state_callback_(type);
+  }
+}
+
 } // namespace nspanel_lovelace
 } // namespace esphome
