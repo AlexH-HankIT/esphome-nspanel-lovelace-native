@@ -1,3 +1,9 @@
+# This is a fork of [olicooper/esphome-nspanel-lovelace-native](https://github.com/olicooper/esphome-nspanel-lovelace-native)
+
+I added the following improvements:
+ - Configurable screensaver entities: Added screensaver.entities so the 4 forecast slots can be replaced by any HA entities (icon + name + value). When these are set, forecast fetching is disabled and the screensaver renders those entities instead.
+ - Timer popup actually counts down: Fixed the timer detail page so it computes and refreshes the remaining time correctly (uses proper time parsing and updates every second), instead of showing 00:00 while active.
+
 # ESPHome Native Component for NSPanel (beta)
 
 This project is designed to utilise the UI provided by [NSPanel Lovelace UI](https://github.com/joBr99/nspanel-lovelace-ui), but use a native [ESPHome](https://github.com/esphome/esphome) component for the backend. My core goals for the project were to:
