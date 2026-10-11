@@ -65,11 +65,29 @@ public:
   void accept(PageItemVisitor& visitor) override;
 
   bool get_alt_font() const { return this->alt_font_; }
+  bool get_show_state() const { return this->show_state_; }
+  void set_show_state(bool value) { this->show_state_ = value; this->set_render_invalid(); }
+  void set_hide_when_zero(bool value) { this->hide_when_zero_ = value; this->set_render_invalid(); }
+  bool set_connected(bool connected) {
+    if (!this->show_state_ || this->connected_ == connected) return false;
+    this->connected_ = connected;
+    if (!connected) this->state_received_ = false;
+    this->set_render_invalid();
+    return true;
+  }
+  void mark_state_received() {
+    if (!this->show_state_) return;
+    this->connected_ = true;
+    this->state_received_ = true;
+    this->set_render_invalid();
+  }
   
   void set_alt_font(bool large) { this->alt_font_ = large; }
 
 protected:
   bool alt_font_;
+  bool show_state_{false}, hide_when_zero_{false};
+  bool connected_{false}, state_received_{false};
 
   // output: icon~iconColor
   std::string &render_(std::string &buffer) override;

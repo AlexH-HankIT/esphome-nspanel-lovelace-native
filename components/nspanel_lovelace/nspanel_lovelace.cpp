@@ -25,6 +25,7 @@
 #include "page_item_visitor.h"
 #include "page_visitor.h"
 #include "translations.h"
+#include "task_snapshot.h"
 
 namespace esphome {
 namespace nspanel_lovelace {
@@ -96,6 +97,31 @@ void NSPanelLovelace::setup() {
   this->default_baud_rate_ = this->parent_->get_baud_rate();
 
   this->restore_state_();
+#ifdef USE_NSPANEL_TODO
+  this->register_service(&NSPanelLovelace::set_task_data, "set_task_data", {"card_id", "payload"});
+  this->set_interval("todo_status", 1000, [this, was_connected = false]() mutable {
+    const bool connected = api::global_api_server->is_connected_with_state_subscription();
+    if (connected && !was_connected)
+      this->set_timeout("todo_reconnect", 2000, [this] { this->refresh_todo_cards_(); });
+    was_connected = connected;
+    for (auto &entry : this->todo_cards_) {
+      if (entry.second->model().tick(millis(), connected) &&
+          this->page_mgr_.current_page() == entry.second)
+        this->render_item_update_(entry.second);
+    }
+  });
+#endif
+
+  if (this->screensaver_ && this->screensaver_->has_status_count()) {
+    this->set_interval("status_connection", 1000, [this] {
+      const bool connected = api::global_api_server->is_connected_with_state_subscription();
+      if (this->screensaver_->set_status_connection(connected) &&
+          this->page_mgr_.current_page() == this->screensaver_) {
+        this->screensaver_->render_status_update(this->command_buffer_);
+        this->send_buffered_command_();
+      }
+    });
+  }
 
   // Create default and screensaver bookmarks if they doesn't exist.
   // This won't overwrite any custom set values if set.
@@ -685,6 +711,9 @@ void NSPanelLovelace::render_current_page_() {
   this->set_display_timeout(page->get_sleep_timeout());
   
   this->render_item_update_(page);
+  for (auto &entry : this->todo_cards_)
+    if (page == entry.second && api::global_api_server->is_connected_with_state_subscription())
+      this->call_ha_service_(entry.second->refresh_script(), std::map<std::string, std::string>{});
 }
 
 void NSPanelLovelace::render_item_update_() {
@@ -1727,6 +1756,7 @@ void NSPanelLovelace::process_button_press_(
     const std::string &value,
     bool called_from_timeout) {
   if (button_type.empty()) return;
+  if (this->process_task_press_(internal_id, button_type)) return;
 
   // Screen tapped when on the screensaver, show the default card or use the first card in the config.
   if (internal_id == to_string(page_type::screensaver) && button_type == button_type::bExit) {
@@ -2295,7 +2325,7 @@ void NSPanelLovelace::call_ha_service_(
 
 #if ESPHOME_LOG_LEVEL >= ESPHOME_LOG_LEVEL_DEBUG
   auto it = data.find(to_string(ha_attr_type::entity_id));
-  if (it == data.end())
+  if (it != data.end())
     ESP_LOGD(TAG, "Call HA: %s -> %s", service.c_str(), it->second.c_str());
   else
     ESP_LOGD(TAG, "Call HA: %s", service.c_str());
@@ -2374,6 +2404,8 @@ void NSPanelLovelace::on_entity_attribute_update_(
 
   if (ha_attr == ha_attr_type::state) {
     entity->set_state(attr_value);
+    // A reconnect can deliver the same value; Entity suppresses identical updates.
+    if (this->screensaver_) this->screensaver_->mark_status_state_received(entity_id);
   } else {
     entity->set_attribute(ha_attr, attr_value);
   }
@@ -2669,6 +2701,60 @@ void NSPanelLovelace::on_weather_forecast_update_(
     weatherItem->set_value(buff);
   }
   this->send_weather_update_command_();
+}
+
+void NSPanelLovelace::refresh_todo_cards_() {
+  if (!api::global_api_server->is_connected_with_state_subscription()) return;
+  std::vector<std::string> requested;
+  for (auto &entry : this->todo_cards_) {
+    const auto &script = entry.second->refresh_script();
+    if (std::find(requested.begin(), requested.end(), script) != requested.end()) continue;
+    requested.push_back(script);
+    this->call_ha_service_(script, std::map<std::string, std::string>{});
+  }
+}
+
+void NSPanelLovelace::set_task_data(std::string card_id, std::string payload) {
+  auto found = this->todo_cards_.find(card_id);
+  if (found == this->todo_cards_.end()) {
+    ESP_LOGW(TAG, "Unknown task card '%s'", card_id.c_str());
+    return;
+  }
+  auto *card = found->second;
+  SpiRamAllocator allocator;
+  ArduinoJson::JsonDocument doc(&allocator);
+  decode_task_snapshot(doc, payload, card->lists(), card->model(), millis());
+  card->model().tick(millis(), api::global_api_server->is_connected_with_state_subscription());
+  if (!card->model().error().empty()) ESP_LOGW(TAG, "Task snapshot rejected: %s", card->model().error().c_str());
+  if (this->page_mgr_.current_page() == card) this->render_item_update_(card);
+}
+
+bool NSPanelLovelace::process_task_press_(const std::string &id, const std::string &button) {
+  if (!esphome::str_startswith(id, "task.") && !esphome::str_startswith(id, "tasknav.")) return false;
+  if (button != button_type::button) return true;
+  for (auto &entry : this->todo_cards_) {
+    auto *card = entry.second;
+    if (this->page_mgr_.current_page() != card) continue;
+    if (id == card->nav_prefix() + "prev") {
+      if (card->model().previous()) this->render_item_update_(card);
+      return true;
+    }
+    if (id == card->nav_prefix() + "next") {
+      if (card->model().next()) this->render_item_update_(card);
+      return true;
+    }
+    const auto prefix = card->task_prefix();
+    if (!esphome::str_startswith(id, prefix)) continue;
+    card->model().tick(millis(), api::global_api_server->is_connected_with_state_subscription());
+    const auto *item = card->model().request(id.substr(prefix.size()), millis());
+    if (item != nullptr) {
+      this->call_ha_service_(card->completion_script(), {
+          {"todo_entity", item->entity_id}, {"uid", item->uid}});
+      this->render_item_update_(card);
+    }
+    return true;
+  }
+  return true;
 }
 
 } // namespace nspanel_lovelace

@@ -135,6 +135,8 @@ CONF_SCREENSAVER_WEATHER = "weather"
 CONF_SCREENSAVER_ENTITIES = "entities"
 CONF_SCREENSAVER_STATUS_ICON_LEFT = "status_icon_left"
 CONF_SCREENSAVER_STATUS_ICON_RIGHT = "status_icon_right"
+CONF_STATUS_SHOW_STATE = "show_state"
+CONF_STATUS_HIDE_WHEN_ZERO = "hide_when_zero"
 CONF_SCREENSAVER_STATUS_ICON_ALT_FONT = "alt_font" # todo: to_code
 CONF_SCREENSAVER_DOUBLE_TAP_TO_UNLOCK = "double_tap_to_unlock"
 CONF_SCREENSAVER_FORECAST_METHOD = "forecast_method"
@@ -153,7 +155,11 @@ CARD_QR="cardQR"
 CARD_ALARM="cardAlarm"
 CARD_THERMO="cardThermo"
 CARD_MEDIA="cardMedia"
-CARD_TYPE_OPTIONS = [CARD_ENTITIES, CARD_GRID, CARD_GRID2, CARD_QR, CARD_ALARM, CARD_THERMO, CARD_MEDIA]
+CARD_TODO="cardTodo"
+CONF_TODO_LISTS="todo_lists"
+CONF_COMPLETION_SCRIPT="completion_script"
+CONF_REFRESH_SCRIPT="refresh_script"
+CARD_TYPE_OPTIONS = [CARD_ENTITIES, CARD_GRID, CARD_GRID2, CARD_QR, CARD_ALARM, CARD_THERMO, CARD_MEDIA, CARD_TODO]
 
 CONF_CARD_QR_TEXT = "qr_text"
 CONF_CARD_ALARM_ENTITY_ID = "alarm_entity_id"
@@ -307,6 +313,20 @@ def has_card_type(config):
         raise cv.Invalid(f"type is required for cards, options are {CARD_TYPE_OPTIONS}")
     return config
 
+def valid_todo_list(value):
+    value = cv.string_strict(value)
+    if not re.fullmatch(r"todo\.[a-z0-9_]+", value):
+        raise cv.Invalid("Expected a Home Assistant todo.entity_id")
+    return value
+
+
+def valid_task_script(value):
+    value = cv.string_strict(value)
+    if not re.fullmatch(r"script\.[a-z0-9_]+", value):
+        raise cv.Invalid("Expected a Home Assistant script.entity_id")
+    return value
+
+
 def ensure_unique(value: list):
     all_values = list(value)
     unique_values = set(value)
@@ -331,6 +351,8 @@ SCHEMA_STATUS_ICON = cv.Schema({
     cv.Optional(CONF_ENTITY_ID): valid_entity_id(['sensor','binary_sensor','light']),
     cv.Optional(CONF_ICON): SCHEMA_ICON,
     cv.Optional(CONF_SCREENSAVER_STATUS_ICON_ALT_FONT): cv.boolean,
+    cv.Optional(CONF_STATUS_SHOW_STATE, default=False): cv.boolean,
+    cv.Optional(CONF_STATUS_HIDE_WHEN_ZERO, default=False): cv.boolean,
 })
 
 SCHEMA_CARD_ENTITY = cv.Schema({
@@ -389,12 +411,15 @@ def get_card_entities_length_limits(card_type: str, model: str = 'eu') -> list[i
 
 def validate_config(config):
     global card_ids
+    card_ids = {}
     model = config[CONF_MODEL]
     if CONF_LANGUAGE not in config[CONF_LOCALE]:
         raise cv.Invalid("A language must be specified in locale")
     # Build a list of custom card ids
     for i, card_config in enumerate(config.get(CONF_CARDS, [])):
         if CONF_ID in card_config:
+            if card_config[CONF_ID] in card_ids:
+                raise cv.Invalid("Card IDs must be unique", [CONF_CARDS, i, CONF_ID])
             card_ids[card_config[CONF_ID]] = i
 
     if CONF_DEFAULT_CARD in config and card_ids.get(config[CONF_DEFAULT_CARD]) is None:
@@ -445,6 +470,18 @@ def validate_config(config):
         screensaver_config = config.get(CONF_SCREENSAVER)
         left = screensaver_config.get(CONF_SCREENSAVER_STATUS_ICON_LEFT, None)
         right = screensaver_config.get(CONF_SCREENSAVER_STATUS_ICON_RIGHT, None)
+        for key in (CONF_SCREENSAVER_STATUS_ICON_LEFT, CONF_SCREENSAVER_STATUS_ICON_RIGHT):
+            status = screensaver_config.get(key, {})
+            path = [CONF_SCREENSAVER, key]
+            if status.get(CONF_STATUS_HIDE_WHEN_ZERO) and not status.get(CONF_STATUS_SHOW_STATE):
+                raise cv.Invalid("hide_when_zero requires show_state", path)
+            if status.get(CONF_STATUS_SHOW_STATE):
+                if model != 'eu':
+                    raise cv.Invalid("Status counts are supported on the EU display only", path)
+                if not status.get(CONF_ENTITY_ID, '').startswith('sensor.'):
+                    raise cv.Invalid("show_state requires a sensor entity_id", path)
+                if status.get(CONF_SCREENSAVER_STATUS_ICON_ALT_FONT):
+                    raise cv.Invalid("show_state cannot be combined with alt_font", path)
         if left and CONF_ENTITY_ID in left:
             add_entity_id(left.get(CONF_ENTITY_ID))
         if right and CONF_ENTITY_ID in right:
@@ -476,6 +513,12 @@ CONFIG_SCHEMA = cv.All(
         cv.Optional(CONF_CARDS): cv.ensure_list(cv.All(
             has_card_type,
             cv.typed_schema({
+                CARD_TODO: SCHEMA_CARD_BASE.extend({
+                    cv.Required(CONF_ID): cv.All(valid_uuid, cv.Length(min=1)),
+                    cv.Required(CONF_TODO_LISTS): cv.All(cv.ensure_list(valid_todo_list), cv.Length(min=1), ensure_unique),
+                    cv.Optional(CONF_COMPLETION_SCRIPT, default="script.nspanel_complete_task"): valid_task_script,
+                    cv.Optional(CONF_REFRESH_SCRIPT, default="script.nspanel_sync_tasks"): valid_task_script,
+                }),
                 CARD_ENTITIES: SCHEMA_CARD_BASE.extend({
                     cv.Required(CONF_CARD_ENTITIES): cv.ensure_list(SCHEMA_CARD_ENTITY)
                 }),
@@ -522,6 +565,7 @@ GlobalConfig.op = "::"
 
 Screensaver = nspanel_lovelace_ns.class_("Screensaver")
 EntitiesCard = nspanel_lovelace_ns.class_("EntitiesCard")
+TodoCard = nspanel_lovelace_ns.class_("TodoCard")
 GridCard = nspanel_lovelace_ns.class_("GridCard")
 # GridCard2 = nspanel_lovelace_ns.class_("GridCard2")
 QRCard = nspanel_lovelace_ns.class_("QRCard")
@@ -543,6 +587,7 @@ PageType = nspanel_lovelace_ns.enum("page_type", True)
 PAGE_MAP = {
     # [config type] : [c++ variable name prefix], [card class], [card type], [entity class]
     CONF_SCREENSAVER: ["nspanel_screensaver", Screensaver, PageType.screensaver, WeatherItem],
+    CARD_TODO: ["nspanel_card_", TodoCard, PageType.cardEntities, None],
     CARD_ENTITIES: ["nspanel_card_", EntitiesCard, PageType.cardEntities, EntitiesCardEntityItem],
     CARD_GRID: ["nspanel_card_", GridCard, PageType.cardGrid, GridCardEntityItem],
     CARD_GRID2: ["nspanel_card_", GridCard, PageType.cardGrid2, GridCardEntityItem],
@@ -619,9 +664,9 @@ def get_status_icon_statement(icon_config, icon_class: cg.MockObjClass, default_
     # return icon_class.__call__(get_new_uuid(), entity_id, attrs["value"], attrs["color"])
     # todo: esphome is escaping the icon value (e.g. u8"\uE598") due to cpp_string_escape, so having to build a raw statement instead.
     basicstr = f'{make_shared.template(icon_class)}("{get_new_uuid()}", {entity_id}'
-    if isinstance(attrs["value"], str) and isinstance(attrs["color"], int):
+    if attrs["value"] is not None and isinstance(attrs["color"], int):
         return cg.RawStatement(f'{basicstr}, {attrs["value"]}, {attrs["color"]}u)')
-    elif isinstance(attrs["value"], str):
+    elif attrs["value"] is not None:
         return cg.RawStatement(f'{basicstr}, {attrs["value"]})')
     elif isinstance(attrs["color"], int):
         return cg.RawStatement(f'{basicstr}, {default_icon_value}, {attrs["color"]}u)')
@@ -667,6 +712,11 @@ async def to_code(config):
     if cv.Version.parse(ESPHOME_VERSION) >= cv.Version(2025,8,0):
         cg.add_define("USE_API_HOMEASSISTANT_STATES")
         cg.add_define("USE_API_HOMEASSISTANT_SERVICES")
+
+    if any(card[CONF_CARD_TYPE] == CARD_TODO for card in config.get(CONF_CARDS, [])):
+        cg.add_define("USE_NSPANEL_TODO")
+        cg.add_define("USE_API_CUSTOM_SERVICES")
+        cg.add_define("USE_API_USER_DEFINED_ACTIONS")
 
     nspanel = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(nspanel, config)
@@ -777,8 +827,11 @@ async def to_code(config):
             cg.add(cg.RawExpression(f"auto {iconleft_variable} = {screensaver_left_icon}"))
             iconleft_variable_class = cg.global_ns.class_(iconleft_variable)
             iconleft_variable_class.op = '->'
+            generate_icon_config(left_icon_config.get(CONF_ICON), iconleft_variable_class)
             if left_icon_config.get(CONF_SCREENSAVER_STATUS_ICON_ALT_FONT, False):
                 cg.add(iconleft_variable_class.set_alt_font(True))
+            cg.add(iconleft_variable_class.set_show_state(left_icon_config[CONF_STATUS_SHOW_STATE]))
+            cg.add(iconleft_variable_class.set_hide_when_zero(left_icon_config[CONF_STATUS_HIDE_WHEN_ZERO]))
             cg.add(screensaver_class.set_icon_left(iconleft_variable_class))
 
         if CONF_SCREENSAVER_STATUS_ICON_RIGHT in screensaver_config:
@@ -790,8 +843,11 @@ async def to_code(config):
             cg.add(cg.RawExpression(f"auto {iconright_variable} = {screensaver_right_icon}"))
             iconright_variable_class = cg.global_ns.class_(iconright_variable)
             iconright_variable_class.op = '->'
+            generate_icon_config(right_icon_config.get(CONF_ICON), iconright_variable_class)
             if right_icon_config.get(CONF_SCREENSAVER_STATUS_ICON_ALT_FONT, False):
                 cg.add(iconright_variable_class.set_alt_font(True))
+            cg.add(iconright_variable_class.set_show_state(right_icon_config[CONF_STATUS_SHOW_STATE]))
+            cg.add(iconright_variable_class.set_hide_when_zero(right_icon_config[CONF_STATUS_HIDE_WHEN_ZERO]))
             cg.add(screensaver_class.set_icon_right(iconright_variable_class))
 
         screensaver_entities = screensaver_config.get(CONF_SCREENSAVER_ENTITIES, None)
@@ -897,6 +953,18 @@ async def to_code(config):
                 f"auto {card_variable} = "
                 f"{nspanel.create_page.template(page_info[1]).__call__(card_uuids[i], title, sleep_timeout)}"))
             # cg.add(cg.variable(card_variable, make_shared.template(page_info[1]).__call__(cg.global_ns.class_(page_info[0] + str(i + 1)))))
+
+        if card_config[CONF_CARD_TYPE] == CARD_TODO:
+            cg.add(card_class.set_lists(card_config[CONF_TODO_LISTS]))
+            cg.add(card_class.set_completion_script(card_config[CONF_COMPLETION_SCRIPT]))
+            cg.add(card_class.set_refresh_script(card_config[CONF_REFRESH_SCRIPT]))
+            cg.add(card_class.set_labels(*[
+                translationJson.get(key, fallback) for key, fallback in [
+                    ("todo_done", "Done"), ("todo_loading", "Loading"),
+                    ("todo_empty", "No open tasks"), ("todo_stale", "Data stale"),
+                    ("todo_error", "Sync error"), ("todo_unconfirmed", "Not confirmed")]
+            ]))
+            cg.add(nspanel.register_todo_card(card_config[CONF_ID], card_class))
 
         # Special case for pages which use a different underlying type
         if card_config[CONF_CARD_TYPE] == CARD_GRID2:

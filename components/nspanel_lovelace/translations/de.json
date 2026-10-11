@@ -106,5 +106,11 @@
   "dow_friday": "Freitag",
   "dow_fri": "Fr",
   "dow_saturday": "Samstag",
-  "dow_sat": "Sa"
+  "dow_sat": "Sa",
+  "todo_done": "Erledigt",
+  "todo_loading": "Laden",
+  "todo_empty": "Keine offenen Aufgaben",
+  "todo_stale": "Daten veraltet",
+  "todo_error": "Sync-Fehler",
+  "todo_unconfirmed": "Nicht bestätigt"
 }

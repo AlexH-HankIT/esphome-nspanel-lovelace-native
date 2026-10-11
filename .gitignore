@@ -2,3 +2,4 @@
 /.build/
 /secrets.yaml
 **/__pycache__
+/.local/ha-packages/

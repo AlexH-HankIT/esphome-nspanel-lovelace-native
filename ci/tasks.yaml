@@ -1,0 +1,9 @@
+packages:
+  - !include '../tasks-example.yaml'
+esphome:
+  build_path: ./build/ci-tasks
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [nspanel_lovelace]

@@ -42,6 +42,7 @@
 #include "page_manager.h"
 #include "card_base.h"
 #include "pages.h"
+#include "todo_card.h"
 
 namespace esphome {
 namespace nspanel_lovelace {
@@ -124,6 +125,8 @@ public:
 #ifdef USE_NSPANEL_WEATHER_SERVICE
   void set_weather_forecast_data(std::string forecast_json);
 #endif
+  void register_todo_card(const std::string &id, TodoCard *card) { this->todo_cards_[id] = card; }
+  void set_task_data(std::string card_id, std::string payload);
   void set_weather_entity_id(const std::string &weather_entity_id) { this->weather_entity_id_ = weather_entity_id; }
   void set_weather_forecast_enabled(bool enabled) { this->weather_forecast_enabled_ = enabled; }
 
@@ -243,6 +246,9 @@ protected:
   bool time_configured_;
 #endif
   
+  std::map<std::string, TodoCard *> todo_cards_;
+  void refresh_todo_cards_();
+  bool process_task_press_(const std::string &id, const std::string &button);
   bool double_tap_to_unlock_ = false;
 
   uint8_t display_active_dim_ = 100;

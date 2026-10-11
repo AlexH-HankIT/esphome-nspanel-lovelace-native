@@ -1,4 +1,5 @@
 #include "pages.h"
+#include "status_icon_state.h"
 
 #include "config.h"
 #include "types.h"
@@ -32,34 +33,15 @@ std::string &Screensaver::render(std::string &buffer) {
 
 // output: statusUpdate~icon1~icon1Color~icon2~icon2Color~icon1AltFont~icon2AltFont
 std::string &Screensaver::render_status_update(std::string &buffer) {
-  if (!this->left_icon || !this->right_icon) {
-    // buffer.clear();
+  if (!this->left_icon && !this->right_icon) {
+    buffer.clear();
     return buffer;
   }
-
-  std::string alt_font;
-  buffer.assign("statusUpdate").append(1, SEPARATOR);
-  
-  if (this->left_icon) {
-    buffer.append(this->left_icon->render()).append(1, SEPARATOR);
-    if (this->left_icon->get_alt_font()) {
-      alt_font.append(1, '1');
-    }
-  } else {
-    buffer.append(2, SEPARATOR);
-  }
-  alt_font.append(1, SEPARATOR);
-
-  if (this->right_icon) {
-    buffer.append(this->right_icon->render()).append(1, SEPARATOR);
-    if (this->right_icon->get_alt_font()) {
-      alt_font.append(1, '1');
-    }
-  } else {
-    buffer.append(2, SEPARATOR);
-  }
-  
-  return buffer.append(alt_font);
+  return buffer = render_status_icons(
+      this->left_icon ? this->left_icon->render() : "~",
+      this->right_icon ? this->right_icon->render() : "~",
+      this->left_icon && this->left_icon->get_alt_font(),
+      this->right_icon && this->right_icon->get_alt_font());
 }
 
 } // namespace nspanel_lovelace

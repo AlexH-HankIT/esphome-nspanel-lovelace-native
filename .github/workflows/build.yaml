@@ -11,6 +11,7 @@ on:
       - ".github/workflows/build.yaml"
       - "*example.yaml"
       - "ci/*.yaml"
+      - "tests/**"
 
   pull_request:
     branches:
@@ -19,6 +20,7 @@ on:
       - "components/nspanel_lovelace/**"
       - "*example.yaml"
       - "ci/*.yaml"
+      - "tests/**"
 
 jobs:
   test:
@@ -29,12 +31,23 @@ jobs:
       max-parallel: 2
       matrix:
         version: [stable]
-        variant: [advanced]
+        variant: [advanced, tasks]
     container:
       image: ghcr.io/esphome/esphome:${{ matrix.version }}
     steps:
     - uses: actions/checkout@v6
+    - name: Test task identities and confirmation
+      run: g++ -std=c++17 -Wall -Wextra -Werror -Icomponents/nspanel_lovelace tests/task_model_test.cpp -o /tmp/task-model-test && /tmp/task-model-test
+    - name: Test status icon counts
+      run: g++ -std=c++17 -Wall -Wextra -Werror -Icomponents/nspanel_lovelace tests/status_icon_state_test.cpp -o /tmp/status-icon-test && /tmp/status-icon-test
     - name: Copy test secrets
       run: |
         cp secrets-example.yaml secrets.yaml
+    - name: Test status icon configuration
+      run: python tests/status_icon_config_test.py
     - run: esphome compile ci/${{ matrix.variant }}.yaml
+    - name: Test task snapshot validation
+      run: >-
+        g++ -std=c++17 -Wall -Wextra -Werror -Icomponents/nspanel_lovelace
+        -Ici/.esphome/build/ci-${{ matrix.variant }}/managed_components/bblanchon__arduinojson/src
+        tests/task_snapshot_test.cpp -o /tmp/task-snapshot-test && /tmp/task-snapshot-test

@@ -106,5 +106,11 @@
   "dow_friday": "Friday",
   "dow_fri": "Fri",
   "dow_saturday": "Saturday",
-  "dow_sat": "Sat"
+  "dow_sat": "Sat",
+  "todo_done": "Done",
+  "todo_loading": "Loading",
+  "todo_empty": "No open tasks",
+  "todo_stale": "Data stale",
+  "todo_error": "Sync error",
+  "todo_unconfirmed": "Not confirmed"
 }

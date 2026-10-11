@@ -1,4 +1,5 @@
 #include "page_items.h"
+#include "status_icon_state.h"
 
 #include "config.h"
 #include "helpers.h"
@@ -102,7 +103,10 @@ StatusIconItem::StatusIconItem(
 void StatusIconItem::accept(PageItemVisitor& visitor) { visitor.visit(*this); }
 
 std::string &StatusIconItem::render_(std::string &buffer) {
-  // icon~iconColor
+  // icon[ count]~iconColor
+  if (this->show_state_)
+    return buffer = render_status_count(this->get_icon_value() ? CHAR8_CAST(this->get_icon_value()) : "", this->get_icon_color(),
+        this->get_state(), this->hide_when_zero_, this->connected_ && this->state_received_);
   return PageItem_Icon::render_(buffer);
 }
 
